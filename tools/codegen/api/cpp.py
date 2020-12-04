@@ -1,7 +1,7 @@
 from tools.codegen.model import *
 from tools.codegen.api.types import *
 import tools.codegen.local as local
-from typing import Optional, Sequence, Union, List
+from typing import Optional, Sequence, Union, List, Tuple
 
 # This file describes the translation of JIT schema to the public C++
 # API, which is what people use when they call functions like at::add.
@@ -23,9 +23,9 @@ from typing import Optional, Sequence, Union, List
 # BTW: policy on name collisions: we try not to have types with
 # collisions, but functions are fair game to collide
 
-def name(func: FunctionSchema) -> str:
+def name(func: FunctionSchema, *, use_suffix_for_out_overloads: bool = True) -> str:
     name = str(func.name.name)
-    if func.is_out_fn():
+    if use_suffix_for_out_overloads and func.is_out_fn():
         name += '_out'
     return name
 
@@ -252,16 +252,20 @@ def argument_not_this(
 
 def argument(
     a: Union[Argument, TensorOptionsArguments, SelfArgument],
+    is_out_argument: bool,
 ) -> Union[CppSingleArgumentPack, CppThisArgumentPack]:
     if isinstance(a, SelfArgument):
+        assert not is_out_argument
         return CppThisArgumentPack(argument=a, type=argument_type(a.argument))
     else:
-        return CppSingleArgumentPack(argument_not_this(a))
+        return CppSingleArgumentPack(argument_not_this(a), is_out_argument)
 
 def argument_faithful(
     a: Union[Argument, TensorOptionsArguments, SelfArgument],
+    is_out_argument: bool,
 ) -> CppArgumentPack:
     if isinstance(a, TensorOptionsArguments):
+        assert not is_out_argument
         return CppTensorOptionsArgumentPack(
             argument=a,
             dtype=argument_not_this(a.dtype),
@@ -270,13 +274,13 @@ def argument_faithful(
             pin_memory=argument_not_this(a.pin_memory),
         )
     else:
-        return argument(a)
+        return argument(a, is_out_argument)
 
+# returns tuple(arguments, out_arguments)
 def group_arguments(
     func: FunctionSchema, *, method: bool
-) -> Sequence[Union[Argument, TensorOptionsArguments, SelfArgument]]:
+) -> Tuple[Sequence[Union[Argument, TensorOptionsArguments, SelfArgument]], Sequence[Argument]]:
     args: List[Union[Argument, SelfArgument, TensorOptionsArguments]] = []
-    args.extend(func.arguments.out)
     args.extend(func.arguments.pre_self_positional)
     if func.arguments.self_arg is not None:
         if method:
@@ -288,4 +292,4 @@ def group_arguments(
     if func.arguments.tensor_options is not None:
         args.append(func.arguments.tensor_options)
     args.extend(func.arguments.post_tensor_options_kwarg_only)
-    return args
+    return (args, func.arguments.out)
