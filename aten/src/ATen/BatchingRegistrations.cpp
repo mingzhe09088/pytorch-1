@@ -941,7 +941,7 @@ Tensor new_empty_strided_batching_rule(
         size.size(), ") must match dimensionality of strides (",
         stride.size(), ")");
   auto storage_size = native::storage_size_for(size, stride);
-  for (int64_t idx = 0; idx < physical_strides.size(); ++idx) {
+  for (size_t idx = 0; idx < physical_strides.size(); ++idx) {
     physical_strides[idx] *= storage_size;
   }
 
